@@ -153,6 +153,11 @@ tail of the VM serial console is printed.
   pick the base image) and buildable on that base. Override with `release`.
 * The source git server must support shallow fetch; a fetch by commit id works
   on GitHub. A blobless filter is used when the server offers it.
+* Snapshot images (used by `skip-world`) are installed from pkgbase packages.
+  The install step sets `ALLOW_PKGBASE_INSTALLKERNEL` and
+  `ALLOW_PKGBASE_INSTALLWORLD`, otherwise `installkernel` refuses to run. As a
+  result the package database no longer matches the kernel in the VM, so do not
+  run `pkg upgrade` for base packages there (installing other packages is fine).
 * The VM has outbound network access; `git-lite` is installed with `pkg`.
 
 ## Local use
