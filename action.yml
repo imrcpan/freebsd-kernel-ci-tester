@@ -1,91 +1,96 @@
-name: 'FreeBSD-vm'
-description: 'Test in a real FreeBSD virtual machine on GitHub Actions -- QEMU-powered, with SSH and two-way folder sync'
+name: 'FreeBSD source build and test'
+description: 'Boot an official FreeBSD VM (QEMU) on the runner, build a FreeBSD source tree from git inside it, install it and run a command on the result'
+author: 'imrcpan'
+
 inputs:
-  osname:
-    description: 'The OS name'
+  src-repo:
+    description: 'Git URL of the FreeBSD source tree to build, e.g. https://github.com/freebsd/freebsd-src.git'
     required: true
-    default: 'freebsd'
-  prepare:
-    description: 'Install some tools before CI runs'
+  src-branch:
+    description: 'Branch, tag or commit of src-repo to build. Default is the remote HEAD.'
     required: false
-  run:
-    description: 'The CI command to run'
-    required: false
+    default: ''
   release:
-    description: 'The release version of FreeBSD vm. Only the leading, "." separated part of it is enough, the newest matching release is used.'
+    description: 'Official FreeBSD amd64 release used as the build host VM, e.g. 14.4. It must be able to build the source tree.'
     required: false
-  arch:
-    description: 'The cpu architecture of FreeBSD vm'
+    default: '14.4'
+  kernconf:
+    description: 'Kernel configuration to build and install.'
     required: false
+    default: 'GENERIC'
+  build-cmd:
+    description: 'Build command, run in the source tree. Default: make -j<cpus> buildworld buildkernel KERNCONF=<kernconf>'
+    required: false
+    default: ''
+  install-cmd:
+    description: 'Install command, run in the source tree. Set to "none" to skip installing.'
+    required: false
+    default: 'make installkernel installworld KERNCONF=${KERNCONF} && etcupdate -B || true'
+  reboot:
+    description: 'Reboot the VM after install-cmd so the run step uses the new kernel.'
+    required: false
+    default: 'true'
+  run:
+    description: 'Script run in the VM (with sh, in the source tree) after build and install: the program under test.'
+    required: false
+    default: ''
   envs:
-    description: 'The envs to pass into FreeBSD vm'
+    description: 'Whitespace separated names of environment variables to pass into the VM.'
     required: false
+    default: ''
   mem:
-    description: 'Set the memory size of the vm'
+    description: 'VM memory in MB.'
     required: false
-    default: '6144'
+    default: '10240'
   cpu:
-    description: 'Set the cpu cores of the vm'
-    required: false
-  nat:
-    description: 'The NAT ports to FreeBSD vm'
-    required: false
-  usesh:
-    description: 'Deprecated and ignored. The prepare/run scripts are always executed with sh.'
-    required: false
-  sync:
-    description: 'How to synchronize the source code to/from the VM. Default is rsync.'
-    required: false
-  copyback:
-    description: 'Whether or not to copy the build result repo back from the VM to the host runner. Default is true.'
-    required: false
-  debug:
-    description: 'output debug message'
-    required: false
-  data-dir:
-    description: 'Directory to store VM data/images.'
-    required: false
-  cache-dir:
-    description: 'Directory to store anyvm cache. If set, overrides default temp cache path.'
-    required: false
-  sync-time:
-    description: 'Synchronize the VM time with the ntp. Default is false.'
-    required: false
-  disable-cache:
-    description: 'Disable caching for apt packages and VM images. Default is false.'
-    required: false
-    default: 'false'
-  cache-after-prepare:
-    description: 'Cache the VM image again after the prepare step, so later runs with the same prepare script skip it and start directly at run. Default is false.'
-    required: false
-    default: 'false'
-  cache-after-prepare-key-suffix:
-    description: 'Optional. Extra value appended to the cache-after-prepare cache key. Change it to discard the prepared VM image cache and run prepare again. Default is empty.'
+    description: 'VM cpu count. Default is the number of cpus of the runner.'
     required: false
     default: ''
-  debug-on-error:
-    description: 'If true, enable remote VNC and you can connect to the VM via web VNC page to debug. Default is false.'
+  disk:
+    description: 'VM disk size (sparse), e.g. 60G.'
     required: false
-    default: ''
-  vnc-password:
-    description: 'The VNC password. Default is empty.'
+    default: '60G'
+  build-timeout:
+    description: 'Seconds allowed for fetching and building the source tree.'
     required: false
-    default: ''
-  custom-shell-name:
-    description: 'Custom shell name for the VM shell wrapper script.'
-    required: false
-  token:
-    description: 'GitHub token used for the GitHub API requests that locate the VM image. Defaults to the workflow token; unauthenticated requests share a small rate limit across all jobs on the same runner IP.'
-    required: false
-    default: ${{ github.token }}
-outputs:
-  cache-after-prepare-hit:
-    description: 'true when a prepared VM image cache was restored and the prepare step was skipped, false otherwise.'
-branding:
-  icon: 'server'
-  color: 'red'
+    default: '18000'
 
 runs:
-  using: 'node24'
-  main: 'index.js'
+  using: 'composite'
+  steps:
+    - name: Install host tools
+      shell: bash
+      run: '"${{ github.action_path }}/scripts/setup-host.sh"'
 
+    - name: Boot FreeBSD VM
+      shell: bash
+      env:
+        FBSD_RELEASE: ${{ inputs.release }}
+        FBSD_MEM: ${{ inputs.mem }}
+        FBSD_CPU: ${{ inputs.cpu }}
+        FBSD_DISK: ${{ inputs.disk }}
+      run: '"${{ github.action_path }}/scripts/boot-vm.sh"'
+
+    - name: Build and run the FreeBSD source tree
+      shell: bash
+      env:
+        SRC_REPO: ${{ inputs.src-repo }}
+        SRC_BRANCH: ${{ inputs.src-branch }}
+        KERNCONF: ${{ inputs.kernconf }}
+        BUILD_CMD: ${{ inputs.build-cmd }}
+        INSTALL_CMD_INPUT: ${{ inputs.install-cmd }}
+        REBOOT: ${{ inputs.reboot }}
+        RUN_CMD: ${{ inputs.run }}
+        PASS_ENVS: ${{ inputs.envs }}
+        BUILD_TIMEOUT: ${{ inputs.build-timeout }}
+      run: '"${{ github.action_path }}/scripts/run.sh"'
+
+    - name: Show VM console on failure
+      if: failure()
+      shell: bash
+      run: '"${{ github.action_path }}/scripts/cleanup.sh" --dump'
+
+    - name: Stop FreeBSD VM
+      if: always()
+      shell: bash
+      run: '"${{ github.action_path }}/scripts/cleanup.sh"'
