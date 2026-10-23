@@ -12,9 +12,12 @@ if [ "${1:-}" = "--dump" ]; then
 fi
 
 pidfile="$FBSD_WORKDIR/qemu.pid"
-if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+# qemu removes its pidfile when it exits, so a missing file means "stopped".
+alive() { [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null; }
+
+if alive; then
   vm_ssh 'shutdown -p now' >/dev/null 2>&1 || true
-  for _ in $(seq 1 30); do kill -0 "$(cat "$pidfile")" 2>/dev/null || exit 0; sleep 1; done
+  for _ in $(seq 1 30); do alive || exit 0; sleep 1; done
   kill "$(cat "$pidfile")" 2>/dev/null || true
 fi
 exit 0

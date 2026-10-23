@@ -6,7 +6,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 group "Install host tools"
 need=()
-for pair in qemu-system-x86_64:qemu-system-x86 qemu-img:qemu-utils genisoimage:genisoimage xz:xz-utils ssh:openssh-client curl:curl; do
+for pair in qemu-system-x86_64:qemu-system-x86 qemu-img:qemu-utils genisoimage:genisoimage xz:xz-utils ssh:openssh-client curl:curl zstd:zstd; do
   command -v "${pair%%:*}" >/dev/null 2>&1 || need+=("${pair##*:}")
 done
 if [ ${#need[@]} -gt 0 ]; then

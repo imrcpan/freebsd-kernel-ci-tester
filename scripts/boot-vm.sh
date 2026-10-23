@@ -7,6 +7,7 @@
 #   FBSD_CPU      guest cpu count (default: host cpu count)
 #   FBSD_DISK     guest disk size (default 40G)
 #   FBSD_BOOT_TIMEOUT  seconds to wait for ssh (default 600)
+#   FBSD_IMAGE    bundle written by export-image.sh; boot it instead of a stock image
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/lib.sh"
@@ -20,6 +21,14 @@ timeout_s="${FBSD_BOOT_TIMEOUT:-600}"
 mkdir -p "$FBSD_WORKDIR"
 cd "$FBSD_WORKDIR"
 
+if [ -n "${FBSD_IMAGE:-}" ]; then
+group "Unpack image bundle $FBSD_IMAGE"
+[ -f "$FBSD_IMAGE" ] || die "no such image bundle: $FBSD_IMAGE"
+zstd -dc "$FBSD_IMAGE" | tar -x -f - disk.qcow2 id_ed25519 id_ed25519.pub
+chmod 600 id_ed25519
+qemu-img resize -q disk.qcow2 "$disk"
+endgroup
+else
 group "Prepare FreeBSD $release image"
 base="https://download.freebsd.org/releases/VM-IMAGES/${release}-RELEASE/amd64/Latest"
 name="FreeBSD-${release}-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2"
@@ -68,18 +77,25 @@ runcmd:
 USER
 genisoimage -quiet -output seed.iso -volid cidata -joliet -rock seed/user-data seed/meta-data
 endgroup
+fi
 
 accel=tcg
 cpu_model=max
 if [ -w /dev/kvm ]; then accel=kvm; cpu_model=host; fi
 log "starting qemu: accel=$accel cpu=$cpu mem=${mem}M"
 
+# The cloud-init seed only exists for a stock image; a bundle is already set up.
+seed_args=()
+if [ -z "${FBSD_IMAGE:-}" ]; then
+  seed_args=(-drive "file=seed.iso,if=virtio,format=raw,media=cdrom,readonly=on")
+fi
+
 rm -f qemu.pid
 qemu-system-x86_64 \
   -machine "q35,accel=$accel" -cpu "$cpu_model" -smp "$cpu" -m "$mem" \
   -display none -serial "file:$FBSD_WORKDIR/console.log" -monitor none \
   -drive "file=disk.qcow2,if=virtio,format=qcow2,cache=unsafe" \
-  -drive "file=seed.iso,if=virtio,format=raw,media=cdrom,readonly=on" \
+  "${seed_args[@]}" \
   -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:${FBSD_SSH_PORT}-:22" \
   -device virtio-net-pci,netdev=n0 \
   -device virtio-rng-pci \
