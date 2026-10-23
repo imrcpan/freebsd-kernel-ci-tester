@@ -2,21 +2,29 @@
 # Download the official FreeBSD VM image, boot it with QEMU and wait for ssh.
 #
 # Environment:
-#   FBSD_RELEASE  base image release, e.g. 14.4 (default 14.4)
+#   FBSD_RELEASE  base image: a release (14.4) or a snapshot branch
+#                 (16.0-CURRENT, 15.1-STABLE). Empty: with SKIP_WORLD=true it is
+#                 detected from SRC_REPO/SRC_BRANCH, otherwise 14.4.
+#   SKIP_WORLD    "true": the base image's prebuilt world is used as is
 #   FBSD_MEM      guest memory in MB (default 6144)
 #   FBSD_CPU      guest cpu count (default: host cpu count)
 #   FBSD_DISK     guest disk size (default 40G)
-#   FBSD_BOOT_TIMEOUT  seconds to wait for ssh (default 600)
+#   FBSD_BOOT_TIMEOUT  seconds to wait for ssh (default 1800)
 #   FBSD_IMAGE    bundle written by export-image.sh; boot it instead of a stock image
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/lib.sh"
 
-release="${FBSD_RELEASE:-14.4}"
+release="${FBSD_RELEASE:-}"
+if [ -z "$release" ] && [ "${SKIP_WORLD:-false}" = true ] && [ -n "${SRC_REPO:-}" ] && [ -z "${FBSD_IMAGE:-}" ]; then
+  release="$(detect_base_release "$SRC_REPO" "${SRC_BRANCH:-HEAD}")"
+  log "source tree is $release, using the latest prebuilt world of that branch"
+fi
+release="${release:-14.4}"
 mem="${FBSD_MEM:-6144}"
 cpu="${FBSD_CPU:-$(nproc)}"
 disk="${FBSD_DISK:-40G}"
-timeout_s="${FBSD_BOOT_TIMEOUT:-600}"
+timeout_s="${FBSD_BOOT_TIMEOUT:-1800}"
 
 mkdir -p "$FBSD_WORKDIR"
 cd "$FBSD_WORKDIR"
@@ -30,12 +38,21 @@ qemu-img resize -q disk.qcow2 "$disk"
 endgroup
 else
 group "Prepare FreeBSD $release image"
-base="https://download.freebsd.org/releases/VM-IMAGES/${release}-RELEASE/amd64/Latest"
-name="FreeBSD-${release}-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2"
+case "$release" in
+  *-CURRENT|*-STABLE)
+    base="https://download.freebsd.org/snapshots/VM-IMAGES/${release}/amd64/Latest"
+    name="FreeBSD-${release}-amd64-BASIC-CLOUDINIT-ufs.qcow2" ;;
+  *)
+    base="https://download.freebsd.org/releases/VM-IMAGES/${release}-RELEASE/amd64/Latest"
+    name="FreeBSD-${release}-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2" ;;
+esac
 if [ ! -f "$name" ]; then
   curl -fsSL --retry 5 --retry-delay 5 -o "$name.xz" "$base/$name.xz"
   curl -fsSL --retry 5 --retry-delay 5 -o CHECKSUM.SHA256 "$base/CHECKSUM.SHA256"
-  want="$(sed -n "s/^SHA256 ($name.xz) = //p" CHECKSUM.SHA256)"
+  # Snapshot checksum files list dated names ("...-20261019-<id>-ufs.qcow2.xz")
+# while Latest/ serves the undated one, so match on the image kind instead.
+want="$(sed -n 's/^SHA256 (.*BASIC-CLOUDINIT-\(.*[-.]\)\{0,1\}ufs\.qcow2\.xz) = //p' CHECKSUM.SHA256)"
+[ "$(printf '%s\n' "$want" | grep -c .)" = 1 ] || die "cannot find a unique checksum for $name.xz"
   have="$(sha256sum "$name.xz" | cut -d' ' -f1)"
   [ -n "$want" ] && [ "$want" = "$have" ] || die "checksum mismatch for $name.xz"
   xz -dc "$name.xz" > "$name"

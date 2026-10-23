@@ -43,3 +43,35 @@ wait_ssh() {
   done
   log "ssh is up after $(( $(date +%s) - start ))s"
 }
+
+# detect_base_release <repo> <ref>: print the official image that carries the
+# latest prebuilt world for that source tree: "16.0-CURRENT", "15.1-STABLE" or
+# a plain release such as "14.4". Reads sys/conf/newvers.sh with a blobless
+# shallow fetch, so no full checkout is needed.
+detect_base_release() {
+  local repo="$1" ref="${2:-HEAD}" tmp rev branch
+  tmp="$(mktemp -d)"
+  git -C "$tmp" init -q
+  git -C "$tmp" remote add origin "$repo"
+  git -C "$tmp" fetch -q --depth 1 --filter=blob:none origin "$ref" >&2 \
+    || git -C "$tmp" fetch -q --depth 1 origin "$ref" >&2 \
+    || { rm -rf "$tmp"; die "cannot fetch $repo $ref"; }
+  local vers
+  vers="$(git -C "$tmp" show FETCH_HEAD:sys/conf/newvers.sh)" || { rm -rf "$tmp"; die "no sys/conf/newvers.sh in $repo $ref"; }
+  rm -rf "$tmp"
+  rev="$(printf '%s\n' "$vers" | sed -n 's/^REVISION="\(.*\)"/\1/p' | head -n1)"
+  branch="$(printf '%s\n' "$vers" | sed -n 's/^BRANCH="\(.*\)"/\1/p' | head -n1)"
+  [ -n "$rev" ] && [ -n "$branch" ] || die "cannot parse REVISION/BRANCH from newvers.sh"
+  case "$branch" in
+    CURRENT|STABLE) echo "$rev-$branch" ;;
+    RELEASE*)       echo "$rev" ;;
+    *)
+      # ALPHA/BETA/RC/PRERELEASE of a stable branch: the snapshot directory is
+      # named after the previous release (stable/15 at 15.2-PRERELEASE is
+      # published as 15.1-STABLE), so look it up by major version.
+      local snap
+      snap="$(curl -fsSL --retry 3 https://download.freebsd.org/snapshots/VM-IMAGES/ \
+        | grep -o "href=\"${rev%%.*}\.[0-9]*-STABLE/\"" | sed 's/href="//;s#/"##' | sort -V | tail -n1)" || true
+      echo "${snap:-$rev}" ;;
+  esac
+}
