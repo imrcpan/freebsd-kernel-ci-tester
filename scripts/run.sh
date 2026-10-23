@@ -3,11 +3,13 @@
 # run the user supplied command. The VM must already be up (boot-vm.sh).
 #
 # Environment (all optional unless noted):
-#   SRC_REPO (required)  SRC_BRANCH  SRC_DIR  KERNCONF  JOBS
+#   SRC_REPO  SRC_BRANCH  SRC_DIR  KERNCONF  JOBS
 #   BUILD_CMD     build command, run in SRC_DIR
 #   INSTALL_CMD   install command, run in SRC_DIR; empty = do not install
 #   INSTALL_CMD_INPUT  like INSTALL_CMD but empty = default, "none" = skip
 #   REBOOT        "true" to reboot after INSTALL_CMD (default true)
+#   SRC_REPO empty: nothing is built or installed, only RUN_CMD/RUN_FILE run
+#   RUN_FILE      host path of a script copied into the VM and run (before RUN_CMD)
 #   RUN_CMD       script run in the VM after build/install
 #   PASS_ENVS     whitespace separated names of host envs to pass to the VM
 #   BUILD_TIMEOUT seconds allowed for the build (default 21600)
@@ -15,7 +17,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/lib.sh"
 
-: "${SRC_REPO:?SRC_REPO is required}"
+SRC_REPO="${SRC_REPO:-}"
 SRC_DIR="${SRC_DIR:-/usr/src}"
 KERNCONF="${KERNCONF:-GENERIC}"
 JOBS="${JOBS:-}"
@@ -56,9 +58,13 @@ guest_exec() { # guest_exec <local-script> [timeout]
   vm_ssh "set -e; . /tmp/$(basename "$envfile"); ${pre}sh $remote"
 }
 
+if [ -n "$SRC_REPO" ]; then
 group "Fetch and build the source tree"
 guest_exec "$here/guest-build.sh" "$BUILD_TIMEOUT"
 endgroup
+else
+  INSTALL_CMD=""
+fi
 
 if [ -n "$INSTALL_CMD" ]; then
   group "Install the build"
@@ -79,10 +85,24 @@ group "System under test"
 vm_ssh 'uname -a'
 endgroup
 
+# Run a user script in the VM, from the source tree if there is one.
+run_user_script() { # run_user_script <host-script-path>
+  local wrapped="$FBSD_WORKDIR/guest-run-$(basename "$1")"
+  { printf 'cd %s 2>/dev/null || cd /
+' "$(shq "$SRC_DIR")"; cat "$1"; } > "$wrapped"
+  guest_exec "$wrapped"
+}
+
+if [ -n "${RUN_FILE:-}" ]; then
+  [ -f "$RUN_FILE" ] || die "run-file not found: $RUN_FILE"
+  group "Run $RUN_FILE"
+  run_user_script "$RUN_FILE"
+  endgroup
+fi
+
 if [ -n "${RUN_CMD:-}" ]; then
   group "Run"
-  runner="$FBSD_WORKDIR/guest-run.sh"
-  printf 'cd %s\n%s\n' "$(shq "$SRC_DIR")" "$RUN_CMD" > "$runner"
-  guest_exec "$runner"
+  printf '%s\n' "$RUN_CMD" > "$FBSD_WORKDIR/run-cmd.sh"
+  run_user_script "$FBSD_WORKDIR/run-cmd.sh"
   endgroup
 fi
