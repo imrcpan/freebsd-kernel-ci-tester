@@ -14,6 +14,7 @@
 #   RUN_CMD       script run in the VM after build/install
 #   PASS_ENVS     whitespace separated names of host envs to pass to the VM
 #   BUILD_TIMEOUT seconds allowed for the build (default 21600)
+#   BUILD_VERBOSE "true": stream the whole build output (log viewers truncate it)
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/lib.sh"
@@ -48,6 +49,7 @@ envfile="$FBSD_WORKDIR/guest.env"
   echo "export SRC_DIR=$(shq "$SRC_DIR")"
   echo "export KERNCONF=$(shq "$KERNCONF")"
   echo "export SKIP_WORLD=$(shq "$SKIP_WORLD")"
+  echo "export BUILD_VERBOSE=$(shq "${BUILD_VERBOSE:-false}")"
   [ -z "${SRC_BRANCH:-}" ] || echo "export SRC_BRANCH=$(shq "$SRC_BRANCH")"
   [ -z "$JOBS" ] || echo "export JOBS=$(shq "$JOBS")"
   [ -z "${BUILD_CMD:-}" ] || echo "export BUILD_CMD=$(shq "$BUILD_CMD")"
@@ -67,8 +69,12 @@ guest_exec() { # guest_exec <local-script> [timeout]
 
 if [ -n "$SRC_REPO" ]; then
 group "Fetch and build the source tree"
-guest_exec "$here/guest-build.sh" "$BUILD_TIMEOUT"
+build_rc=0
+guest_exec "$here/guest-build.sh" "$BUILD_TIMEOUT" || build_rc=$?
+# keep the full build output on the runner; the action uploads it
+vm_scp -q "root@127.0.0.1:/var/tmp/build.log" "$FBSD_WORKDIR/build.log" 2>/dev/null || true
 endgroup
+[ "$build_rc" -eq 0 ] || die "build failed (exit $build_rc), see $FBSD_WORKDIR/build.log"
 else
   INSTALL_CMD=""
 fi
