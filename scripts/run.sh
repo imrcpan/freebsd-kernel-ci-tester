@@ -3,6 +3,7 @@
 # run the user supplied command. The VM must already be up (boot-vm.sh).
 #
 # Environment (all optional unless noted):
+#   SKIP_WORLD    "true": build and install only the kernel (default false)
 #   SRC_REPO  SRC_BRANCH  SRC_DIR  KERNCONF  JOBS
 #   BUILD_CMD     build command, run in SRC_DIR
 #   INSTALL_CMD   install command, run in SRC_DIR; empty = do not install
@@ -21,10 +22,15 @@ SRC_REPO="${SRC_REPO:-}"
 SRC_DIR="${SRC_DIR:-/usr/src}"
 KERNCONF="${KERNCONF:-GENERIC}"
 JOBS="${JOBS:-}"
+SKIP_WORLD="${SKIP_WORLD:-false}"
 REBOOT="${REBOOT:-true}"
 BUILD_TIMEOUT="${BUILD_TIMEOUT:-21600}"
 # INSTALL_CMD_INPUT is what the action passes: empty = default, "none" = skip.
-default_install='make installkernel installworld KERNCONF=${KERNCONF} && etcupdate -B || true'
+if [ "$SKIP_WORLD" = true ]; then
+  default_install='make installkernel KERNCONF=${KERNCONF}'
+else
+  default_install='make installkernel installworld KERNCONF=${KERNCONF} && etcupdate -B || true'
+fi
 case "${INSTALL_CMD_INPUT-__unset__}" in
   __unset__) INSTALL_CMD="${INSTALL_CMD-$default_install}" ;;
   "")        INSTALL_CMD="$default_install" ;;
@@ -41,6 +47,7 @@ envfile="$FBSD_WORKDIR/guest.env"
   echo "export SRC_REPO=$(shq "$SRC_REPO")"
   echo "export SRC_DIR=$(shq "$SRC_DIR")"
   echo "export KERNCONF=$(shq "$KERNCONF")"
+  echo "export SKIP_WORLD=$(shq "$SKIP_WORLD")"
   [ -z "${SRC_BRANCH:-}" ] || echo "export SRC_BRANCH=$(shq "$SRC_BRANCH")"
   [ -z "$JOBS" ] || echo "export JOBS=$(shq "$JOBS")"
   [ -z "${BUILD_CMD:-}" ] || echo "export BUILD_CMD=$(shq "$BUILD_CMD")"

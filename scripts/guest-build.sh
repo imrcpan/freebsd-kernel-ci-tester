@@ -5,7 +5,9 @@
 #   SRC_REPO    git url of the FreeBSD source tree          (required)
 #   SRC_BRANCH  branch, tag or commit to build              (default: repo HEAD)
 #   SRC_DIR     checkout location                           (default /usr/src)
-#   BUILD_CMD   build command, run from SRC_DIR             (default: buildworld buildkernel)
+#   BUILD_CMD   build command, run from SRC_DIR             (default: buildworld buildkernel,
+#               or only buildkernel when SKIP_WORLD=true)
+#   SKIP_WORLD  "true": do not build the world, the VM's prebuilt one is used
 #   JOBS        make -j value                               (default: hw.ncpu)
 #   KERNCONF    kernel config                               (default: GENERIC)
 set -eu
@@ -14,7 +16,12 @@ set -eu
 : "${SRC_DIR:=/usr/src}"
 : "${KERNCONF:=GENERIC}"
 : "${JOBS:=$(sysctl -n hw.ncpu)}"
-: "${BUILD_CMD:=make -j${JOBS} buildworld buildkernel KERNCONF=${KERNCONF}}"
+: "${SKIP_WORLD:=false}"
+if [ "${SKIP_WORLD}" = true ]; then
+    : "${BUILD_CMD:=make -j${JOBS} buildkernel KERNCONF=${KERNCONF}}"
+else
+    : "${BUILD_CMD:=make -j${JOBS} buildworld buildkernel KERNCONF=${KERNCONF}}"
+fi
 
 echo "==> installing git"
 if ! command -v git >/dev/null 2>&1; then
