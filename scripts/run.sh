@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Build a FreeBSD source tree inside the VM, install it, reboot into it and
+# run the user supplied command. The VM must already be up (boot-vm.sh).
+#
+# Environment (all optional unless noted):
+#   SRC_REPO (required)  SRC_BRANCH  SRC_DIR  KERNCONF  JOBS
+#   BUILD_CMD     build command, run in SRC_DIR
+#   INSTALL_CMD   install command, run in SRC_DIR; empty = do not install
+#   INSTALL_CMD_INPUT  like INSTALL_CMD but empty = default, "none" = skip
+#   REBOOT        "true" to reboot after INSTALL_CMD (default true)
+#   RUN_CMD       script run in the VM after build/install
+#   PASS_ENVS     whitespace separated names of host envs to pass to the VM
+#   BUILD_TIMEOUT seconds allowed for the build (default 21600)
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$here/lib.sh"
+
+: "${SRC_REPO:?SRC_REPO is required}"
+SRC_DIR="${SRC_DIR:-/usr/src}"
+KERNCONF="${KERNCONF:-GENERIC}"
+JOBS="${JOBS:-}"
+REBOOT="${REBOOT:-true}"
+BUILD_TIMEOUT="${BUILD_TIMEOUT:-21600}"
+# INSTALL_CMD_INPUT is what the action passes: empty = default, "none" = skip.
+default_install='make installkernel installworld KERNCONF=${KERNCONF} && etcupdate -B || true'
+case "${INSTALL_CMD_INPUT-__unset__}" in
+  __unset__) INSTALL_CMD="${INSTALL_CMD-$default_install}" ;;
+  "")        INSTALL_CMD="$default_install" ;;
+  none)      INSTALL_CMD="" ;;
+  *)         INSTALL_CMD="$INSTALL_CMD_INPUT" ;;
+esac
+
+# Quote a value for safe use inside a POSIX sh script.
+shq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+# Environment file shared by all the guest scripts.
+envfile="$FBSD_WORKDIR/guest.env"
+{
+  echo "export SRC_REPO=$(shq "$SRC_REPO")"
+  echo "export SRC_DIR=$(shq "$SRC_DIR")"
+  echo "export KERNCONF=$(shq "$KERNCONF")"
+  [ -z "${SRC_BRANCH:-}" ] || echo "export SRC_BRANCH=$(shq "$SRC_BRANCH")"
+  [ -z "$JOBS" ] || echo "export JOBS=$(shq "$JOBS")"
+  [ -z "${BUILD_CMD:-}" ] || echo "export BUILD_CMD=$(shq "$BUILD_CMD")"
+  for n in ${PASS_ENVS:-}; do
+    case "$n" in *[!A-Za-z0-9_]*|"") die "invalid env name: $n" ;; esac
+    echo "export $n=$(shq "${!n-}")"
+  done
+} > "$envfile"
+
+guest_exec() { # guest_exec <local-script> [timeout]
+  local script="$1" limit="${2:-0}" remote="/tmp/$(basename "$1")"
+  vm_scp -q "$script" "$envfile" "root@127.0.0.1:/tmp/" >/dev/null
+  local pre=""
+  [ "$limit" = 0 ] || pre="timeout $limit "
+  vm_ssh "set -e; . /tmp/$(basename "$envfile"); ${pre}sh $remote"
+}
+
+group "Fetch and build the source tree"
+guest_exec "$here/guest-build.sh" "$BUILD_TIMEOUT"
+endgroup
+
+if [ -n "$INSTALL_CMD" ]; then
+  group "Install the build"
+  inst="$FBSD_WORKDIR/guest-install.sh"
+  printf 'cd %s\n%s\n' "$(shq "$SRC_DIR")" "$INSTALL_CMD" > "$inst"
+  guest_exec "$inst"
+  if [ "$REBOOT" = true ]; then
+    log "rebooting into the new build"
+    vm_ssh 'nohup sh -c "sleep 1; shutdown -r now" >/dev/null 2>&1 &' || true
+    # wait for the old instance to go away, then for the new one
+    for _ in $(seq 1 60); do vm_ssh -o ConnectTimeout=3 true 2>/dev/null || break; sleep 2; done
+    wait_ssh 900
+  fi
+  endgroup
+fi
+
+group "System under test"
+vm_ssh 'uname -a'
+endgroup
+
+if [ -n "${RUN_CMD:-}" ]; then
+  group "Run"
+  runner="$FBSD_WORKDIR/guest-run.sh"
+  printf 'cd %s\n%s\n' "$(shq "$SRC_DIR")" "$RUN_CMD" > "$runner"
+  guest_exec "$runner"
+  endgroup
+fi

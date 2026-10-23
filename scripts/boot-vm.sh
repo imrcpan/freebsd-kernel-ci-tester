@@ -86,18 +86,6 @@ qemu-system-x86_64 \
   -daemonize -pidfile qemu.pid
 
 group "Waiting for ssh"
-start=$(date +%s)
-until vm_ssh -o ConnectTimeout=5 true 2>/dev/null; do
-  if ! kill -0 "$(cat qemu.pid)" 2>/dev/null; then
-    tail -n 50 console.log || true
-    die "qemu exited unexpectedly"
-  fi
-  if [ $(( $(date +%s) - start )) -gt "$timeout_s" ]; then
-    tail -n 50 console.log || true
-    die "timed out waiting for ssh"
-  fi
-  sleep 5
-done
-log "ssh is up after $(( $(date +%s) - start ))s"
+wait_ssh "$timeout_s"
 vm_ssh 'uname -a; df -h /; sysctl -n hw.ncpu hw.physmem'
 endgroup
