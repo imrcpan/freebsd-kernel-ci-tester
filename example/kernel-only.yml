@@ -1,0 +1,34 @@
+# Copy to .github/workflows/ in your repository.
+# Builds only the kernel of a FreeBSD source tree on the spot, boots it and
+# tests it. Much faster than a full world build (tens of minutes with KVM).
+name: freebsd-kernel
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  kernel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: imrcpan/freebsd-kernel-ci-tester@main
+        with:
+          # Source tree to build: this can be any fork/branch.
+          # To test the repository that runs this CI, use
+          #   src-repo: ${{ github.server_url }}/${{ github.repository }}.git
+          #   src-branch: ${{ github.sha }}
+          src-repo: https://github.com/freebsd/freebsd-src.git
+          src-branch: main
+          release: '14.4'
+          kernconf: GENERIC
+          build-cmd: make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=GENERIC
+          install-cmd: make installkernel KERNCONF=GENERIC
+          reboot: 'true'
+          # Runs on the freshly built kernel.
+          run: |
+            uname -a
+            sysctl kern.version
+            kldload -n tmpfs || true
+            echo "kernel works"

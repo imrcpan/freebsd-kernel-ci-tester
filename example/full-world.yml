@@ -1,0 +1,25 @@
+# Copy to .github/workflows/ in your repository.
+# Full buildworld + buildkernel, install, reboot, then run tests.
+# Needs KVM and several hours; GitHub caps a job at 6 hours.
+name: freebsd-world
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 0'
+
+jobs:
+  world:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: imrcpan/freebsd-kernel-ci-tester@main
+        with:
+          src-repo: https://github.com/freebsd/freebsd-src.git
+          src-branch: main
+          # build-cmd / install-cmd default to buildworld buildkernel and
+          # installkernel installworld + etcupdate.
+          build-timeout: '19800'
+          run: |
+            uname -a
+            kyua test -k /usr/tests/Kyuafile || true

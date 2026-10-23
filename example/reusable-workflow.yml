@@ -1,0 +1,17 @@
+# Copy to .github/workflows/ in your repository.
+# Same thing through the reusable workflow: one `uses:` per job.
+# Test the commit that triggered this CI, taken from your own FreeBSD fork.
+name: freebsd-ci
+
+on: [push, pull_request]
+
+jobs:
+  kernel:
+    uses: imrcpan/freebsd-kernel-ci-tester/.github/workflows/kernel-ci.yml@main
+    with:
+      src-repo: ${{ github.server_url }}/${{ github.repository }}.git
+      src-branch: ${{ github.sha }}
+      kernconf: GENERIC
+      run: |
+        uname -a
+        echo "booted the kernel built from ${{ github.sha }}"
