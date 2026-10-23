@@ -42,18 +42,47 @@ your own `build-cmd` (and `install-cmd: none`):
 
 ## Examples for other repositories
 
-Ready to copy into `.github/workflows/` of your repository, see `example/`:
+Ready-to-copy workflows live in [`example/`](example/). Copy one into
+`.github/workflows/` of your own repository and adjust the inputs.
 
-* `example/kernel-only.yml`: build only the kernel on the spot, boot it, test it
-* `example/full-world.yml`: full `buildworld buildkernel`, install, reboot, test
-* `example/reusable-workflow.yml`: the same through the reusable workflow
-  `imrcpan/freebsd-kernel-ci-tester/.github/workflows/kernel-ci.yml@main`
-  (inputs: `src-repo`, `src-branch`, `release`, `kernconf`, `world`, `run`)
+| example | what it does | typical time (KVM) |
+| --- | --- | --- |
+| [`kernel-only.yml`](example/kernel-only.yml) | builds only the kernel, installs it, reboots into it, runs `run` | tens of minutes |
+| [`full-world.yml`](example/full-world.yml) | `buildworld buildkernel`, install, reboot, runs the test suite; weekly schedule | hours (job limit is 6 h) |
+| [`reusable-workflow.yml`](example/reusable-workflow.yml) | same as kernel-only, through the reusable workflow, one `uses:` per job | as kernel-only |
 
-To test the repository that runs the CI, pass
-`src-repo: ${{ github.server_url }}/${{ github.repository }}.git` and
-`src-branch: ${{ github.sha }}`. Private source repositories are not
-supported (the VM clones anonymously).
+### `kernel-only.yml`
+
+The quickest way to get "compile my kernel on the spot and boot it". It
+overrides `build-cmd` with `make -j$(sysctl -n hw.ncpu) buildkernel` and
+`install-cmd` with `make installkernel`, so no world is built. The `run`
+script executes after the reboot, i.e. on the kernel that was just built.
+Note that the rest of the system is the stock `release` userland, so use a
+`release` close to the branch you build (see Requirements).
+
+### `full-world.yml`
+
+Uses the default `build-cmd` and `install-cmd` (full world and kernel), and
+raises `build-timeout`. Use it when the change touches userland or you need a
+matching world and kernel.
+
+### `reusable-workflow.yml`
+
+Calls `.github/workflows/kernel-ci.yml` of this repository. Inputs: `src-repo`,
+`src-branch`, `release`, `kernconf`, `world` (`true` also builds and installs
+the world), `run`, `timeout-minutes`. It is the shortest form when you do not
+need the other action inputs.
+
+### Testing the repository that runs the CI
+
+In any example, replace the source tree with the repository under test:
+
+```yaml
+src-repo: ${{ github.server_url }}/${{ github.repository }}.git
+src-branch: ${{ github.sha }}
+```
+
+The VM clones anonymously, so private source repositories are not supported.
 
 ## Inputs
 
