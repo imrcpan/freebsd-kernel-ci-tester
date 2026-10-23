@@ -1,539 +1,85 @@
-# Run GitHub CI in FreeBSD 
+# freebsd-kernel-ci-tester
 
-![Test](https://github.com/vmactions/freebsd-vm/workflows/Test/badge.svg)
+A GitHub Action that builds a FreeBSD source tree from git **inside a real
+FreeBSD VM** on the runner, installs the result, reboots into it and runs a
+command of your choice. It is meant for testing kernel / base system changes
+from other repositories' CI.
 
+It does not depend on any pre-built artifact other than the official FreeBSD
+VM image from `download.freebsd.org` (checksum verified): QEMU boots that
+image, the source tree is cloned in the guest and built there with the guest's
+own toolchain.
 
+Forked from [vmactions/freebsd-vm](https://github.com/vmactions/freebsd-vm);
+the anyvm based implementation was replaced.
 
-See all the supported VMs: [VMActions.org](https://vmactions.org)
+## Usage
 
-Powered by [AnyVM.org](https://anyvm.org)
-
-## :robot: AI Ready
-
-> [!TIP]
-> **You don't need to write this workflow by hand.**
->
-> These VMs are now AI-ready. With the **[vmactions-ci skill](https://github.com/vmactions/vmactions-skill)**, an AI coding agent -- Claude Code, Codex, Copilot CLI, Gemini CLI, and others -- understands the full vmactions interface and writes the GitHub Actions CI for you, **automatically**.
->
-> Just describe what you want in plain language, e.g. *"run my tests on FreeBSD"* or *"check that my project builds on FreeBSD aarch64"*, and the agent generates a correct, ready-to-commit `test.yml`. It will:
->
-> - pick the right action, `release`, and `arch` for your target;
-> - install your toolchain and dependencies in the `prepare` step;
-> - forward your secrets and environment variables into the VM;
-> - sync your source code in and back out; and
-> - steer around the common footguns -- the per-OS default shell, the `riscv64` sync method, keeping `runs-on: ubuntu-latest` even for other arches, pinning the action version, and more.
->
-> No need to memorize releases, architectures, package managers, or shells -- the agent handles it. Install the skill once and just ask.
->
-> ### >> [Get the vmactions-ci skill](https://github.com/vmactions/vmactions-skill) <<
-
-Use this action to run your CI in FreeBSD.
-
-The github workflow only supports Ubuntu, Windows and MacOS. But what if you need to use FreeBSD?
-
-
-All the supported releases are here:
-
-
-
-| Release | x86_64 | aarch64(arm64) | riscv64 | powerpc64 |
-|---------|---------|---------|---------|---------|
-| 15.1 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) |
-| 15.0 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) |
-| 14.5 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) | ✅ (nfs,scp,tar) |
-| 14.4 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) | ✅ (nfs,scp,tar) |
-| 14.3 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) | ✅ (nfs,scp,tar) |
-| 14.2 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) | ✅ (nfs,scp,tar) |
-| 14.1 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) | ✅ (nfs,scp,tar) |
-| 14.0 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) | ✅ (nfs,scp,tar) |
-| 13.5 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) | ✅ (nfs,scp,tar) |
-| 13.4 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | —[^rv-stub] | ✅ (nfs,scp,tar) |
-| 13.3 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) | ✅ (nfs,scp,tar) |
-| 13.2 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) | ✅ (nfs,scp,tar) |
-| 12.4 | ✅ (rsync,scp,sshfs,nfs,tar) | ✅ (nfs,scp,tar) | —[^rv-none] | —[^ppc-panic] |
-| 11.4 | ✅ (rsync,scp,sshfs,nfs,tar) | — | — | — |
-| 10.4 | ✅ (rsync,scp,sshfs,nfs,tar) | — | — | — |
-
-<!-- arch-label: aarch64 = aarch64(arm64) -->
-<!-- absent: 13.4-riscv64 rv-stub -->
-<!-- absent: 12.4-riscv64 rv-none -->
-<!-- absent: 12.4-powerpc64 ppc-panic -->
-<!-- desktop-header: FreeBSD desktop images (x86_64): -->
-
-<!-- shelved: 16.0 -->
-<!-- shelved: 16.0-aarch64 -->
-[^rv-none]: riscv64 first became a FreeBSD release architecture in 13.0, so there is no 12.4 riscv64 image to build.
-[^rv-stub]: The upstream 13.4 riscv64 `qcow2.xz` on the FreeBSD archive mirror is a broken 32-byte stub rather than a real disk image, so this target cannot be built.
-[^ppc-panic]: FreeBSD 12.x powerpc64 panics in early boot under QEMU pseries -- its PAPR hash-MMU backend hard-requires 16 MiB large pages, which QEMU advertises only when guest RAM is backed by host huge pages. Reworked in FreeBSD 13.0, so 13.2+ powerpc64 build fine; 12.4 (EOL) is dropped.
-
-> **Note:** The 15.x riscv64 images install their packages from
-> [anyvm-org/freebsd-pkg-repo](https://github.com/anyvm-org/freebsd-pkg-repo),
-> because pkg.FreeBSD.org publishes no riscv64 packages at all. That
-> repository is the ports tree built with poudriere under qemu-user and
-> published as signed GitHub release assets; the image carries its public
-> key and one repository block per shard, so `pkg install` works out of the
-> box and `rsync`/`sshfs` sync are available. Packages published into
-> shards created after an image was built are not in that image's copy of
-> the repository list -- refetch `anyvm.conf` from the index release to see
-> them. 13.x and 14.x riscv64 have no such repository (it is built for
-> `FreeBSD:15:riscv64`) and keep the package-less sync methods.
-
-> **Note:** FreeBSD 16.0/16.0-aarch64 confs are kept on disk but not yet
-> opted into the build matrix -- 16.0 is a CURRENT snapshot
-> (`16.0-CURRENT`), not a stable release
-> (`VM_VHD_LINK=".../snapshots/VM-IMAGES/16.0-CURRENT/..."`), and has never
-> had a table row at HEAD (verified against
-> `git show HEAD:.github/data/table.md`), so it is shelved rather than
-> no-build. Delete the two `shelved:` lines above to enable it once 16.0
-> stabilizes.
-
-How the images are built:
-
-Each image is built automatically in the
-[anyvm-org/freebsd-builder](https://github.com/anyvm-org/freebsd-builder)
-repo's GitHub Actions. Most releases start from the official FreeBSD
-VM images (`.qcow2.xz`) published by the FreeBSD project; the builder
-boots the image in QEMU, enables ssh, pre-installs the packages listed
-in the conf, and exports the disk as a compressed qcow2 image.
-Architectures with no official VM image (powerpc64) are instead
-installed unattended from the official FreeBSD release installer ISOs.
-
-Upstream media (see https://www.freebsd.org/where/):
-current releases from https://download.freebsd.org/releases/VM-IMAGES/
-and EOL releases from https://archive.freebsd.org/old-releases/VM-IMAGES/.
-
-
-
-
-
-## 1. Example: `test.yml`:
-
-```yml
-
-name: Test
-
-on: [push]
-
+```yaml
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: A job to run test in FreeBSD
-    env:
-      MYTOKEN : ${{ secrets.MYTOKEN }}
-      MYTOKEN2: "value2"
     steps:
-    - uses: actions/checkout@v7
-    - name: Test in FreeBSD
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        envs: 'MYTOKEN MYTOKEN2'
-        prepare: |
-          
-
-        run: |
-          #pkg install -y curl
-          pwd
-          ls -lah
-          whoami
-          env
-          freebsd-version
-          uname -a
-          #sysctl hw.model
-          sysctl hw.ncpu
-          sysctl hw.physmem
-          sysctl hw.usermem
-
-
-
-
-
-
+      - uses: imrcpan/freebsd-kernel-ci-tester@main
+        with:
+          src-repo: https://github.com/freebsd/freebsd-src.git
+          src-branch: main
+          # default build is: make -j<cpus> buildworld buildkernel
+          run: |
+            uname -a                     # runs on the freshly built kernel
+            kldload if_tuntap && echo ok
 ```
 
-
-The latest major version is: `v1`, which is the most recommended to use. (You can also use the latest full version: `v1.5.9`)  
-
-
-If you are migrating from the previous `v0`, please change the `runs-on: ` to `runs-on: ubuntu-latest`
-
-
-The `envs: 'MYTOKEN MYTOKEN2'` is the env names that you want to pass into the vm.
-
-The `run: xxxxx`  is the command you want to run in the vm.
-
-The env variables are all copied into the VM, and the source code and directory are all synchronized into the VM.
-
-The working dir for `run` in the VM is the same as in the Host machine.
-
-All the source code tree in the Host machine are mounted into the VM.
-
-All the `GITHUB_*` as well as `CI=true` env variables are passed into the VM.
-
-So, you will have the same directory and same default env variables when you `run` the CI script.
-
-The `prepare` and `run` scripts are always executed with `sh` in the VM, whatever the default login shell of the VM is.
-
-The default login shell in FreeBSD(before 14.0) is `tcsh`.  https://docs.freebsd.org/en/articles/linux-users/#shells
-
-
-
-## 2. Share code
-
-The code is shared from the host to the VM via `rsync` by default, you can choose to use `sshfs` or `nfs` or `scp` to share code instead.
-
+A full `buildworld buildkernel` takes one to a few hours on a standard
+runner, so raise `timeout-minutes` accordingly. To test only a subset, give
+your own `build-cmd` (and `install-cmd: none`):
 
 ```yaml
-
-...
-
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        sync: sshfs  # or: nfs
-
-
-...
-
-
+          build-cmd: make -C sbin/ping obj all
+          install-cmd: none
+          run: $(make -C sbin/ping -V .OBJDIR)/ping -c1 127.0.0.1
 ```
 
-You can also set `sync: no`, so the files will not be synced to the  VM.
+## Inputs
 
+| input | default | meaning |
+| --- | --- | --- |
+| `src-repo` | (required) | git URL of the source tree |
+| `src-branch` | remote HEAD | branch, tag or commit to build |
+| `release` | `14.4` | official FreeBSD amd64 release used as the build host |
+| `kernconf` | `GENERIC` | kernel configuration |
+| `build-cmd` | `make -j<cpus> buildworld buildkernel KERNCONF=<kernconf>` | run in the source tree (`/usr/src`) |
+| `install-cmd` | `make installkernel installworld KERNCONF=$KERNCONF && etcupdate -B \|\| true` | `none` skips installing |
+| `reboot` | `true` | reboot after install so `run` uses the new kernel |
+| `run` | | script run (with `sh`, in the source tree) in the VM: the program under test |
+| `envs` | | names of environment variables to pass into the VM |
+| `mem` / `cpu` / `disk` | `10240` / runner cpus / `60G` | VM sizing (disk is sparse) |
+| `build-timeout` | `18000` | seconds allowed for fetch + build |
 
-When using a copy based sync method (`rsync`, `scp`, `tar` or `9p`), you can define `copyback: false` to not copy files back from the VM to the host. It has no effect on `sshfs` and `nfs`, which are live mounts and never copy back.
+The step fails if the build, install or `run` script fails. On failure the
+tail of the VM serial console is printed.
 
+## Requirements and notes
 
-```yaml
+* Linux x86_64 runner with apt (`ubuntu-latest`). KVM is used when
+  available; without it QEMU falls back to TCG, which is far too slow for
+  a full build.
+* The source tree must be buildable by the chosen `release` (a tree newer than
+  the build host may need a newer `release`).
+* The VM has outbound network access; `git-lite` is installed with `pkg`.
 
-...
+## Local use
 
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        sync: rsync
-        copyback: false
-
-
-...
-
-
+```sh
+FBSD_RELEASE=14.4 ./scripts/setup-host.sh
+./scripts/boot-vm.sh
+SRC_REPO=https://github.com/freebsd/freebsd-src.git SRC_BRANCH=main \
+  RUN_CMD='uname -a' ./scripts/run.sh
+./scripts/cleanup.sh
 ```
 
+The VM is reachable with `ssh -i $FBSD_WORKDIR/id_ed25519 -p 2222 root@127.0.0.1`.
 
+## License
 
-
-Becareful: 
-
-If you use `arch: riscv64`, you can only use `sync: scp` for now.
-
-
-
-
-
-
-## 3. NAT from host runner to the VM
-
-You can add NAT port between the host and the VM.
-
-```yaml
-...
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        nat: |
-          "8080": "80"
-          "8443": "443"
-          udp:"8081": "80"
-...
-```
-
-
-## 4. Set memory and cpu
-
-The default memory of the VM is 6144MB, you can use `mem` option to set the memory size:
-
-```yaml
-
-...
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        mem: 4096
-...
-```
-
-
-
-The VM is using all the cpu cores of the host by default, you can use `cpu` option to change the cpu cores:
-
-```yaml
-
-...
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        cpu: 3
-...
-```
-
-
-## 5. Select release
-
-It uses [the FreeBSD 15.1](conf/default.release.conf) by default, you can use `release` option to use another version of FreeBSD:
-
-```yaml
-...
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        release: "15.0"
-...
-```
-
-You can also give only the leading, `.` separated part of a release. The newest release that starts with it is used, so the workflow does not have to be edited for every point release:
-
-```yaml
-...
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        release: "15"
-...
-```
-
-Here `release: "15"` runs the newest `15.x` release of FreeBSD. Every leading part works the same way, this action ships 10, 11, 12, 13, 14, 15. Each part you give has to match in full, so a release that does not exist fails the job instead of quietly falling back to another one.
-
-## 6. Select architecture
-
-The vm is using x86_64(AMD64) by default, but you can use `arch` option to change the architecture:
-
-```yaml
-...
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        arch: aarch64
-...
-```
-
-When you run with `aarch64`, the host runner should still be the normal `x86_64` runner: `runs-on: ubuntu-latest`
-
-It's not recommended to use `ubuntu-24.04-arm` as runner, it's much more slower.
-
-
-
-## 7. Custom shell
-
-Support custom shell:
-
-```yaml
-...
-    steps:
-    - uses: actions/checkout@v7
-    - name: Start VM
-      id: vm
-      uses: vmactions/freebsd-vm@v1
-      with:
-        sync: nfs
-    - name: Custom shell step 1
-      shell: freebsd {0}
-      run: |
-        pwd
-        echo "this is step 1, running inside the VM"
-    - name: Custom shell step 2
-      shell: freebsd {0}
-      run: |
-        pwd
-        echo "this is step 2, running inside the VM"
-...
-```
-
-The custom shell will automatically `cd` into `$GITHUB_WORKSPACE` if it exists before running your commands.
-
-How file changes propagate between the host and the VM depends on the `sync` method:
-
-- `sync: nfs` or `sync: sshfs`: the workspace is a live mount, so file changes are visible on both sides immediately.
-- `sync: rsync` or `sync: scp`: the wrapper syncs the workspace to the VM before each custom shell step and syncs it back afterwards, so files created in the VM are available to later host steps (and vice versa). `rsync` transfers are incremental; `scp` copies the whole workspace each time, which can be slow for large workspaces.
-
-You can also use `custom-shell-name` to set a custom name for the shell wrapper:
-
-```yaml
-...
-    steps:
-    - uses: actions/checkout@v7
-    - name: Start VM
-      id: vm
-      uses: vmactions/freebsd-vm@v1
-      with:
-        sync: nfs
-        custom-shell-name: vmsh
-    - name: Custom shell step 1
-      shell: vmsh {0}
-      run: |
-        pwd
-        echo "this is step 1, running inside the VM"
-    - name: Custom shell step 2
-      shell: vmsh {0}
-      run: |
-        pwd
-        echo "this is step 2, running inside the VM"
-...
-```
-
-
-## 8. Synchronize VM time
-
-If the time in VM is not correct, You can use `sync-time` option to synchronize the VM time with NTP:
-
-```yaml
-...
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        sync-time: true
-...
-```
-
-
-## 9. Disable cache
-
-By default, the action caches `apt` packages on the host and VM images/artifacts. You can use the `disable-cache` option to disable this:
-
-```yml
-...
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        disable-cache: true
-...
-```
-
-
-## 10. Cache the VM image after prepare
-
-The `prepare` step (installing packages etc.) normally runs on every build. With `cache-after-prepare: true`, the action shuts the VM down cleanly after `prepare` has finished, caches the prepared VM image, and boots the VM again before `run`. Later runs with the same `prepare` script restore the prepared image, skip `prepare` entirely, and start directly at `run`:
-
-```yml
-...
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        cache-after-prepare: true
-        prepare: |
-          
-        run: |
-          ...
-...
-```
-
-That is all `cache-after-prepare` needs. The `cache-after-prepare-key-suffix` option below is **optional**; leave it out unless you need it.
-
-The cache key only covers the `prepare` text itself. When `prepare` runs a script from your repository, a change to that script would not rebuild the prepared image. The optional `cache-after-prepare-key-suffix` covers that case: its value is appended to the cache key, so a different value means a different cache. It can be a fixed string you bump by hand (`cache-after-prepare-key-suffix: v2`), or a hash of the files `prepare` depends on:
-
-```yml
-...
-    steps:
-    - uses: actions/checkout@v7
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        cache-after-prepare: true
-        cache-after-prepare-key-suffix: deps-${{ hashFiles('ci/install-deps.sh') }}
-        prepare: |
-          sh ci/install-deps.sh
-        run: |
-          ...
-...
-```
-
-`hashFiles()` is evaluated on the runner, relative to the workspace, so the checkout must come first. It returns an empty string when no file matches, and the key then no longer follows the file, so double-check the path.
-
-Notes:
-
-- The cache key includes a hash of the `prepare` script and the `sync` method, so changing either of them rebuilds the prepared image from the base image. `cache-after-prepare-key-suffix` is optional and empty by default; when set, its value is appended to the key.
-- The source tree is still synchronized into the VM on every run; only the `prepare` step is skipped.
-- The first run (or any run after `prepare` changes) takes longer: the VM is shut down after `prepare`, the prepared image is cached, and the VM boots again before `run`.
-- The action output `cache-after-prepare-hit` is `true` when a prepared image was restored and `prepare` was skipped.
-- The option is ignored when `disable-cache: true` is set or when `prepare` is empty.
-
-
-## 11. Debug on error
-
-If you want to debug the VM when the `prepare` or `run` step fails, you can set `debug-on-error: true`.
-
-When a failure occurs, the action will enable a remote VNC link and wait for your interaction. You can then access the VM via VNC to debug. To continue or finish the action, you can run `touch ~/continue` inside the VM.
-
-[First create a variable `DEBUG_ON_ERROR` with value being "true"](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-variables),
-
-Then use it in the workflow:
-
-```yaml
-...
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        debug-on-error: ${{ vars.DEBUG_ON_ERROR }}
-
-...
-```
-
-You can also set the `vnc-password` parameter to set a custom password to protect the VNC link:
-
-```yaml
-...
-    - name: Test
-      id: test
-      uses: vmactions/freebsd-vm@v1
-      with:
-        debug-on-error: ${{ vars.DEBUG_ON_ERROR }}
-        vnc-password: ${{ secrets.VNC_PASSWORD }}
-
-...
-```
-
-You will be asked to input the username and password when you access the VNC link. The username can be any string, the password is the value of the `vnc-password` parameter.
-
-
-See more: [debug on error](https://github.com/vmactions/.github/wiki/debug%E2%80%90on%E2%80%90error)
-
-
-
-# Under the hood
-
-We use Qemu to run the FreeBSD VM.
-
-
-
-
-# Upcoming features:
-
-1. Support MacOS runner and Windows runner.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+MIT, see `LICENSE`.
