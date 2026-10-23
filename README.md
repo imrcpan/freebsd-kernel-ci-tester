@@ -40,6 +40,21 @@ your own `build-cmd` (and `install-cmd: none`):
           run: $(make -C sbin/ping -V .OBJDIR)/ping -c1 127.0.0.1
 ```
 
+## Examples for other repositories
+
+Ready to copy into `.github/workflows/` of your repository, see `example/`:
+
+* `example/kernel-only.yml`: build only the kernel on the spot, boot it, test it
+* `example/full-world.yml`: full `buildworld buildkernel`, install, reboot, test
+* `example/reusable-workflow.yml`: the same through the reusable workflow
+  `imrcpan/freebsd-kernel-ci-tester/.github/workflows/kernel-ci.yml@main`
+  (inputs: `src-repo`, `src-branch`, `release`, `kernconf`, `world`, `run`)
+
+To test the repository that runs the CI, pass
+`src-repo: ${{ github.server_url }}/${{ github.repository }}.git` and
+`src-branch: ${{ github.sha }}`. Private source repositories are not
+supported (the VM clones anonymously).
+
 ## Inputs
 
 | input | default | meaning |
