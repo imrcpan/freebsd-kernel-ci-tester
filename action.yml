@@ -11,22 +11,26 @@ inputs:
     description: 'Branch, tag or commit of src-repo to build. Default is the remote HEAD.'
     required: false
     default: ''
-  release:
-    description: 'Official FreeBSD amd64 release used as the build host VM, e.g. 14.4. It must be able to build the source tree.'
+  skip-world:
+    description: 'Do not build the world: boot the latest official prebuilt snapshot of the source tree branch (16.0-CURRENT for main, 14.5-STABLE for stable/14, ...) and build and install only the kernel on top of it. Set to false to build and install the world as well.'
     required: false
-    default: '14.4'
+    default: 'true'
+  release:
+    description: 'Official FreeBSD amd64 image used as the build host VM: a release such as 14.4, or a snapshot branch such as 16.0-CURRENT or 15.1-STABLE. Default: detected from the source tree when skip-world is true, otherwise 14.4.'
+    required: false
+    default: ''
   kernconf:
     description: 'Kernel configuration to build and install.'
     required: false
     default: 'GENERIC'
   build-cmd:
-    description: 'Build command, run in the source tree. Default: make -j<cpus> buildworld buildkernel KERNCONF=<kernconf>'
+    description: 'Build command, run in the source tree. Default: make -j<cpus> buildkernel KERNCONF=<kernconf>, with buildworld in front when skip-world is false.'
     required: false
     default: ''
   install-cmd:
-    description: 'Install command, run in the source tree. Set to "none" to skip installing.'
+    description: 'Install command, run in the source tree. Default: make installkernel, plus installworld and etcupdate when skip-world is false. Set to "none" to skip installing.'
     required: false
-    default: 'make installkernel installworld KERNCONF=${KERNCONF} && etcupdate -B || true'
+    default: ''
   reboot:
     description: 'Reboot the VM after install-cmd so the run step uses the new kernel.'
     required: false
@@ -79,6 +83,9 @@ runs:
       shell: bash
       env:
         FBSD_RELEASE: ${{ inputs.release }}
+        SKIP_WORLD: ${{ inputs.skip-world }}
+        SRC_REPO: ${{ inputs.src-repo }}
+        SRC_BRANCH: ${{ inputs.src-branch }}
         FBSD_MEM: ${{ inputs.mem }}
         FBSD_CPU: ${{ inputs.cpu }}
         FBSD_DISK: ${{ inputs.disk }}
@@ -91,6 +98,7 @@ runs:
         SRC_REPO: ${{ inputs.src-repo }}
         SRC_BRANCH: ${{ inputs.src-branch }}
         KERNCONF: ${{ inputs.kernconf }}
+        SKIP_WORLD: ${{ inputs.skip-world }}
         BUILD_CMD: ${{ inputs.build-cmd }}
         INSTALL_CMD_INPUT: ${{ inputs.install-cmd }}
         REBOOT: ${{ inputs.reboot }}
