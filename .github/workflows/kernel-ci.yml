@@ -1,0 +1,47 @@
+# Reusable workflow: build a FreeBSD kernel on the spot and test it.
+# See example/reusable-workflow.yml for how to call it.
+name: kernel-ci
+
+on:
+  workflow_call:
+    inputs:
+      src-repo:
+        description: Git URL of the FreeBSD source tree
+        type: string
+        required: true
+      src-branch:
+        description: Branch, tag or commit to build
+        type: string
+        default: ''
+      release:
+        type: string
+        default: '14.4'
+      kernconf:
+        type: string
+        default: GENERIC
+      world:
+        description: Build and install the whole world too (slow)
+        type: boolean
+        default: false
+      run:
+        description: Script to run in the VM on the new kernel
+        type: string
+        default: uname -a
+      timeout-minutes:
+        type: number
+        default: 360
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: imrcpan/freebsd-kernel-ci-tester@main
+        with:
+          src-repo: ${{ inputs.src-repo }}
+          src-branch: ${{ inputs.src-branch }}
+          release: ${{ inputs.release }}
+          kernconf: ${{ inputs.kernconf }}
+          build-cmd: ${{ !inputs.world && format('make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF={0}', inputs.kernconf) || '' }}
+          install-cmd: ${{ !inputs.world && format('make installkernel KERNCONF={0}', inputs.kernconf) || '' }}
+          run: ${{ inputs.run }}
