@@ -125,6 +125,8 @@ The VM clones anonymously, so private source repositories are not supported.
 | `build-cmd` | `make -j<cpus> buildkernel KERNCONF=<kernconf>` (`buildworld` first if `skip-world` is false) | run in the source tree (`/usr/src`) |
 | `install-cmd` | `make installkernel KERNCONF=$KERNCONF` (plus `installworld` and `etcupdate` if `skip-world` is false) | `none` skips installing |
 | `reboot` | `true` | reboot after install so `run` uses the new kernel |
+| `sync-dir` | | runner directory copied one way into the VM before `run`; `run` and `run-file` start in it |
+| `sync-dest` | `/root/work` | where `sync-dir` lands in the VM |
 | `run-file` | | path of a script on the runner, copied into the VM and run before `run` |
 | `image` | | bundle from `export-image` to boot instead of a stock image; with empty `src-repo` nothing is built |
 | `export-image` | | write a bundle (`.tar.zst`) of the final VM to this path; the VM is powered off |
@@ -133,6 +135,25 @@ The VM clones anonymously, so private source repositories are not supported.
 | `mem` / `cpu` / `disk` | `10240` / runner cpus / `60G` | VM sizing (disk is sparse) |
 | `verbose-build` | `false` | stream the whole build output into the step log (see below) |
 | `build-timeout` | `18000` | seconds allowed for fetch + build |
+
+### Passing files into the VM
+
+`sync-dir` copies a runner directory into the VM (one way, tar over ssh) and
+`run` starts there:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: imrcpan/freebsd-kernel-ci-tester@main
+  with:
+    image: ${{ runner.temp }}/built/freebsd-built.tar.zst
+    sync-dir: ${{ github.workspace }}
+    run: |
+      chmod +x ./*
+      ./stress-run
+```
+
+Nothing is copied back. Permissions and symlinks are kept; the previous
+content of `sync-dest` is removed first.
 
 The build output is not streamed by default: a world build prints hundreds of
 thousands of lines and the Actions log viewer truncates the step ("This step
