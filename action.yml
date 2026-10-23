@@ -4,8 +4,9 @@ author: 'imrcpan'
 
 inputs:
   src-repo:
-    description: 'Git URL of the FreeBSD source tree to build, e.g. https://github.com/freebsd/freebsd-src.git'
-    required: true
+    description: 'Git URL of the FreeBSD source tree to build, e.g. https://github.com/freebsd/freebsd-src.git. Leave empty to build nothing and only boot (see image) and run.'
+    required: false
+    default: ''
   src-branch:
     description: 'Branch, tag or commit of src-repo to build. Default is the remote HEAD.'
     required: false
@@ -32,6 +33,18 @@ inputs:
     default: 'true'
   run:
     description: 'Script run in the VM (with sh, in the source tree) after build and install: the program under test.'
+    required: false
+    default: ''
+  run-file:
+    description: 'Path (on the runner) of a script copied into the VM and run before run. Runs in the source tree if there is one.'
+    required: false
+    default: ''
+  image:
+    description: 'Path of an image bundle made by export-image in an earlier job. It is booted instead of the stock release image.'
+    required: false
+    default: ''
+  export-image:
+    description: 'Path to write an image bundle (.tar.zst) of the VM after build/install/run, to hand to later jobs. The VM is powered off afterwards.'
     required: false
     default: ''
   envs:
@@ -69,6 +82,7 @@ runs:
         FBSD_MEM: ${{ inputs.mem }}
         FBSD_CPU: ${{ inputs.cpu }}
         FBSD_DISK: ${{ inputs.disk }}
+        FBSD_IMAGE: ${{ inputs.image }}
       run: '"${{ github.action_path }}/scripts/boot-vm.sh"'
 
     - name: Build and run the FreeBSD source tree
@@ -81,9 +95,17 @@ runs:
         INSTALL_CMD_INPUT: ${{ inputs.install-cmd }}
         REBOOT: ${{ inputs.reboot }}
         RUN_CMD: ${{ inputs.run }}
+        RUN_FILE: ${{ inputs.run-file }}
         PASS_ENVS: ${{ inputs.envs }}
         BUILD_TIMEOUT: ${{ inputs.build-timeout }}
       run: '"${{ github.action_path }}/scripts/run.sh"'
+
+    - name: Export VM image
+      if: inputs.export-image != ''
+      shell: bash
+      env:
+        EXPORT_IMAGE: ${{ inputs.export-image }}
+      run: '"${{ github.action_path }}/scripts/export-image.sh" "$EXPORT_IMAGE"'
 
     - name: Show VM console on failure
       if: failure()
