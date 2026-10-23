@@ -49,6 +49,7 @@ Ready-to-copy workflows live in [`example/`](example/). Copy one into
 | --- | --- | --- |
 | [`kernel-only.yml`](example/kernel-only.yml) | builds only the kernel, installs it, reboots into it, runs `run` | tens of minutes |
 | [`full-world.yml`](example/full-world.yml) | `buildworld buildkernel`, install, reboot, runs the test suite; weekly schedule | hours (job limit is 6 h) |
+| [`full-test-demo/`](example/full-test-demo/workflow.yml) | full world + kernel build once, then 3 parallel test jobs on that exact system | hours (build) + minutes (tests) |
 | [`reusable-workflow.yml`](example/reusable-workflow.yml) | same as kernel-only, through the reusable workflow, one `uses:` per job | as kernel-only |
 
 ### `kernel-only.yml`
@@ -65,6 +66,25 @@ Note that the rest of the system is the stock `release` userland, so use a
 Uses the default `build-cmd` and `install-cmd` (full world and kernel), and
 raises `build-timeout`. Use it when the change touches userland or you need a
 matching world and kernel.
+
+### `full-test-demo/`
+
+[`workflow.yml`](example/full-test-demo/workflow.yml) is a two-stage pipeline:
+
+1. `build` compiles the whole world and kernel, installs them, reboots into
+   them, and exports the installed VM disk (`export-image`) as a one-day
+   artifact (`upload-artifact`, no compression since it is already zstd).
+2. `test` is a matrix of three jobs, run in parallel. Each downloads that
+   artifact, boots it (`image`) without building anything, and runs one
+   script from [`tests/`](example/full-test-demo/tests) (`run-file`):
+   `01-sanity.sh` (kernel/world match, build provenance), `02-kernel.sh`
+   (modules, tmpfs, CPU load) and `03-userland.sh` (compiler, libc, network).
+
+No `actions/cache` is used. The system is only passed along as an artifact of
+the same workflow run. Copy `workflow.yml` to `.github/workflows/` and the
+`tests/` directory to `example/full-test-demo/tests/` (or change `run-file`).
+The bundle contains a throw-away ssh key and the installed system, so do not
+publish it. `/usr/obj` is removed from it to keep it small.
 
 ### `reusable-workflow.yml`
 
@@ -88,13 +108,16 @@ The VM clones anonymously, so private source repositories are not supported.
 
 | input | default | meaning |
 | --- | --- | --- |
-| `src-repo` | (required) | git URL of the source tree |
+| `src-repo` | | git URL of the source tree; empty = build nothing (use with `image`) |
 | `src-branch` | remote HEAD | branch, tag or commit to build |
 | `release` | `14.4` | official FreeBSD amd64 release used as the build host |
 | `kernconf` | `GENERIC` | kernel configuration |
 | `build-cmd` | `make -j<cpus> buildworld buildkernel KERNCONF=<kernconf>` | run in the source tree (`/usr/src`) |
 | `install-cmd` | `make installkernel installworld KERNCONF=$KERNCONF && etcupdate -B \|\| true` | `none` skips installing |
 | `reboot` | `true` | reboot after install so `run` uses the new kernel |
+| `run-file` | | path of a script on the runner, copied into the VM and run before `run` |
+| `image` | | bundle from `export-image` to boot instead of a stock image; with empty `src-repo` nothing is built |
+| `export-image` | | write a bundle (`.tar.zst`) of the final VM to this path; the VM is powered off |
 | `run` | | script run (with `sh`, in the source tree) in the VM: the program under test |
 | `envs` | | names of environment variables to pass into the VM |
 | `mem` / `cpu` / `disk` | `10240` / runner cpus / `60G` | VM sizing (disk is sparse) |
