@@ -40,7 +40,7 @@ inputs:
     required: false
     default: ''
   sync-dir:
-    description: 'Directory on the runner copied one way into the VM before run (tar over ssh); run and run-file start in it. Example: ${{ github.workspace }}'
+    description: 'Directory on the runner copied one way into the VM before run (tar over ssh); run and run-file start in it. Typically the checked out workspace (github.workspace).'
     required: false
     default: ''
   sync-dest:
