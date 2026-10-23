@@ -131,7 +131,15 @@ The VM clones anonymously, so private source repositories are not supported.
 | `run` | | script run (with `sh`, in the source tree) in the VM: the program under test |
 | `envs` | | names of environment variables to pass into the VM |
 | `mem` / `cpu` / `disk` | `10240` / runner cpus / `60G` | VM sizing (disk is sparse) |
+| `verbose-build` | `false` | stream the whole build output into the step log (see below) |
 | `build-timeout` | `18000` | seconds allowed for fetch + build |
+
+The build output is not streamed by default: a world build prints hundreds of
+thousands of lines and the Actions log viewer truncates the step ("This step
+has been truncated due to its large size"). The step shows a progress line every
+five minutes instead, and on failure the last 300 lines plus the exit code. The
+complete output is uploaded as the `freebsd-build-log-<job>` artifact (3 days).
+Set `verbose-build: 'true'` to stream everything.
 
 The step fails if the build, install or `run` script fails. On failure the
 tail of the VM serial console is printed.
