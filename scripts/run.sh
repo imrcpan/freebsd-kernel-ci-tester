@@ -82,7 +82,12 @@ fi
 if [ -n "$INSTALL_CMD" ]; then
   group "Install the build"
   inst="$FBSD_WORKDIR/guest-install.sh"
-  printf 'cd %s\n%s\n' "$(shq "$SRC_DIR")" "$INSTALL_CMD" > "$inst"
+  # A snapshot image is installed from pkgbase packages and make refuses to
+  # install over it unless told that this is intended (the VM is throw-away).
+  {
+    echo 'export ALLOW_PKGBASE_INSTALLKERNEL=yes ALLOW_PKGBASE_INSTALLWORLD=yes'
+    printf 'cd %s\n%s\n' "$(shq "$SRC_DIR")" "$INSTALL_CMD"
+  } > "$inst"
   guest_exec "$inst"
   if [ "$REBOOT" = true ]; then
     log "rebooting into the new build"
