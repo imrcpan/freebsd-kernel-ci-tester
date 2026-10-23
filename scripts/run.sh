@@ -10,6 +10,8 @@
 #   INSTALL_CMD_INPUT  like INSTALL_CMD but empty = default, "none" = skip
 #   REBOOT        "true" to reboot after INSTALL_CMD (default true)
 #   SRC_REPO empty: nothing is built or installed, only RUN_CMD/RUN_FILE run
+#   SYNC_DIR      host directory copied (one way) into the VM before run; run starts there
+#   SYNC_DEST     where it lands in the VM (default /root/work)
 #   RUN_FILE      host path of a script copied into the VM and run (before RUN_CMD)
 #   RUN_CMD       script run in the VM after build/install
 #   PASS_ENVS     whitespace separated names of host envs to pass to the VM
@@ -103,11 +105,24 @@ group "System under test"
 vm_ssh 'uname -a'
 endgroup
 
-# Run a user script in the VM, from the source tree if there is one.
+# Push the runner directory SYNC_DIR (one way, host -> VM) to SYNC_DEST in the
+# VM. tar over ssh: the stock image has neither rsync nor extra tools.
+RUN_DIR=""
+if [ -n "${SYNC_DIR:-}" ]; then
+  [ -d "$SYNC_DIR" ] || die "sync-dir not found: $SYNC_DIR"
+  SYNC_DEST="${SYNC_DEST:-/root/work}"
+  group "Copy $SYNC_DIR to the VM:$SYNC_DEST"
+  vm_ssh "rm -rf $(shq "$SYNC_DEST") && mkdir -p $(shq "$SYNC_DEST")"
+  tar -C "$SYNC_DIR" -cf - . | vm_ssh "tar -C $(shq "$SYNC_DEST") -xpf -"
+  RUN_DIR="$SYNC_DEST"
+  endgroup
+fi
+
+# Run a user script in the VM, from the synced directory, else the source tree.
 run_user_script() { # run_user_script <host-script-path>
   local wrapped="$FBSD_WORKDIR/guest-run-$(basename "$1")"
   { printf 'cd %s 2>/dev/null || cd /
-' "$(shq "$SRC_DIR")"; cat "$1"; } > "$wrapped"
+' "$(shq "${RUN_DIR:-$SRC_DIR}")"; cat "$1"; } > "$wrapped"
   guest_exec "$wrapped"
 }
 

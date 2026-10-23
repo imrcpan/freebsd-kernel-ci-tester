@@ -39,6 +39,14 @@ inputs:
     description: 'Script run in the VM (with sh, in the source tree) after build and install: the program under test.'
     required: false
     default: ''
+  sync-dir:
+    description: 'Directory on the runner copied one way into the VM before run (tar over ssh); run and run-file start in it. Example: ${{ github.workspace }}'
+    required: false
+    default: ''
+  sync-dest:
+    description: 'Where sync-dir lands in the VM.'
+    required: false
+    default: '/root/work'
   run-file:
     description: 'Path (on the runner) of a script copied into the VM and run before run. Runs in the source tree if there is one.'
     required: false
@@ -108,6 +116,8 @@ runs:
         REBOOT: ${{ inputs.reboot }}
         RUN_CMD: ${{ inputs.run }}
         RUN_FILE: ${{ inputs.run-file }}
+        SYNC_DIR: ${{ inputs.sync-dir }}
+        SYNC_DEST: ${{ inputs.sync-dest }}
         PASS_ENVS: ${{ inputs.envs }}
         BUILD_TIMEOUT: ${{ inputs.build-timeout }}
         BUILD_VERBOSE: ${{ inputs.verbose-build }}
