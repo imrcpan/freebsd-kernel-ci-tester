@@ -31,7 +31,8 @@ wait_ssh() {
   local limit="$1" start
   start=$(date +%s)
   until vm_ssh -o ConnectTimeout=5 true 2>/dev/null; do
-    if ! kill -0 "$(cat "$FBSD_WORKDIR/qemu.pid")" 2>/dev/null; then
+    # qemu writes its pidfile only after daemonizing: no file yet is not a death.
+    if [ -s "$FBSD_WORKDIR/qemu.pid" ] && ! kill -0 "$(cat "$FBSD_WORKDIR/qemu.pid")" 2>/dev/null; then
       tail -n 50 "$FBSD_WORKDIR/console.log" || true
       die "qemu exited unexpectedly"
     fi
