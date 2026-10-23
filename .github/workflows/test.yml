@@ -1,0 +1,23 @@
+name: test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Smoke test: build a single program from freebsd-src and run it.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build bin/echo from freebsd-src main and run it
+        uses: ./
+        with:
+          src-repo: https://github.com/freebsd/freebsd-src.git
+          src-branch: main
+          build-cmd: make -C bin/echo obj all
+          install-cmd: none
+          run: |
+            "$(make -C bin/echo -V .OBJDIR)/echo" "hello from the freshly built echo"
+            uname -a
