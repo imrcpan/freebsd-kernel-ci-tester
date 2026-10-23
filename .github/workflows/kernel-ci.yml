@@ -14,13 +14,14 @@ on:
         type: string
         default: ''
       release:
+        description: Base image override, e.g. 14.4 or 15.1-STABLE. Default is detected from the source tree.
         type: string
-        default: '14.4'
+        default: ''
       kernconf:
         type: string
         default: GENERIC
       world:
-        description: Build and install the whole world too (slow)
+        description: Build and install the whole world too (slow). Default false uses the latest official prebuilt world of the branch
         type: boolean
         default: false
       run:
@@ -42,6 +43,5 @@ jobs:
           src-branch: ${{ inputs.src-branch }}
           release: ${{ inputs.release }}
           kernconf: ${{ inputs.kernconf }}
-          build-cmd: ${{ !inputs.world && format('make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF={0}', inputs.kernconf) || '' }}
-          install-cmd: ${{ !inputs.world && format('make installkernel KERNCONF={0}', inputs.kernconf) || '' }}
+          skip-world: ${{ !inputs.world }}
           run: ${{ inputs.run }}

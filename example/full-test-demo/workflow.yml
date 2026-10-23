@@ -37,8 +37,11 @@ jobs:
           src-repo: ${{ env.SRC_REPO }}
           src-branch: ${{ env.SRC_BRANCH }}
           kernconf: GENERIC
-          # defaults: make buildworld buildkernel; installkernel installworld;
-          # etcupdate; reboot into the new system.
+          # skip-world false: make buildworld buildkernel; installkernel
+          # installworld; etcupdate; reboot into the new system.
+          # (With the default true only the kernel is built on top of the
+          # latest official snapshot and 01-sanity.sh would fail, see below.)
+          skip-world: 'false'
           build-timeout: '19800'
           # Runs on the new system, before the image is exported.
           run: |

@@ -1,6 +1,9 @@
 # Copy to .github/workflows/ in your repository.
 # Builds only the kernel of a FreeBSD source tree on the spot, boots it and
-# tests it. Much faster than a full world build (tens of minutes with KVM).
+# tests it. The world is not built: skip-world (default true) boots the latest
+# official prebuilt snapshot of the branch the source tree is on, detected from
+# sys/conf/newvers.sh, so a fork's "dev" branch based on main gets 16.0-CURRENT.
+# Much faster than a full world build (tens of minutes with KVM).
 name: freebsd-kernel
 
 on:
@@ -21,10 +24,8 @@ jobs:
           #   src-branch: ${{ github.sha }}
           src-repo: https://github.com/freebsd/freebsd-src.git
           src-branch: main
-          release: '14.4'
           kernconf: GENERIC
-          build-cmd: make -j$(sysctl -n hw.ncpu) buildkernel KERNCONF=GENERIC
-          install-cmd: make installkernel KERNCONF=GENERIC
+          skip-world: 'true'
           reboot: 'true'
           # Runs on the freshly built kernel.
           run: |

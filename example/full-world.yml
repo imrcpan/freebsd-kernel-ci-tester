@@ -17,8 +17,9 @@ jobs:
         with:
           src-repo: https://github.com/freebsd/freebsd-src.git
           src-branch: main
-          # build-cmd / install-cmd default to buildworld buildkernel and
-          # installkernel installworld + etcupdate.
+          # skip-world false: build-cmd / install-cmd default to buildworld
+          # buildkernel and installkernel installworld + etcupdate.
+          skip-world: 'false'
           build-timeout: '19800'
           run: |
             uname -a
