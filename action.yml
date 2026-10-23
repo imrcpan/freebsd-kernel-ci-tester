@@ -67,6 +67,10 @@ inputs:
     description: 'VM disk size (sparse), e.g. 60G.'
     required: false
     default: '60G'
+  verbose-build:
+    description: 'Stream the whole build output into the step log. Off by default: a world build prints so much that the Actions log viewer truncates the step. The full output is always uploaded as a build-log artifact.'
+    required: false
+    default: 'false'
   build-timeout:
     description: 'Seconds allowed for fetching and building the source tree.'
     required: false
@@ -106,6 +110,7 @@ runs:
         RUN_FILE: ${{ inputs.run-file }}
         PASS_ENVS: ${{ inputs.envs }}
         BUILD_TIMEOUT: ${{ inputs.build-timeout }}
+        BUILD_VERBOSE: ${{ inputs.verbose-build }}
       run: '"${{ github.action_path }}/scripts/run.sh"'
 
     - name: Export VM image
@@ -114,6 +119,15 @@ runs:
       env:
         EXPORT_IMAGE: ${{ inputs.export-image }}
       run: '"${{ github.action_path }}/scripts/export-image.sh" "$EXPORT_IMAGE"'
+
+    - name: Upload the full build log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: freebsd-build-log-${{ github.job }}
+        path: ${{ runner.temp }}/freebsd-vm/build.log
+        retention-days: 3
+        if-no-files-found: ignore
 
     - name: Show VM console on failure
       if: failure()
